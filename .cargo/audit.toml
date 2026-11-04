@@ -1,0 +1,5 @@
+# `rsa` is required for RFB RA2ne interoperability. RustSec reports
+# RUSTSEC-2023-0071 with no fixed upstream release; kVNC does not use the
+# vulnerable signing API. Reassess this exception whenever rsa is updated.
+[advisories]
+ignore = ["RUSTSEC-2023-0071"]
