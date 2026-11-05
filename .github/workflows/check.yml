@@ -1,0 +1,75 @@
+name: Check
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-x64
+            os: ubuntu-latest
+            binary: kvnc
+          - label: linux-arm64
+            os: ubuntu-24.04-arm
+            binary: kvnc
+          - label: windows-x64
+            os: windows-latest
+            binary: kvnc.exe
+          - label: macos-x64
+            os: macos-15-intel
+            binary: kvnc
+          - label: macos-arm64
+            os: macos-14
+            binary: kvnc
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install Linux desktop-capture libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libdbus-1-dev libegl1-mesa-dev libgbm-dev libgl1-mesa-dev libpipewire-0.3-dev libwayland-dev libx11-dev libxrandr-dev
+
+      - name: Check format
+        if: runner.os == 'Linux'
+        run: cargo fmt --check
+
+      - name: Build, test, and lint
+        run: |
+          cargo build --release --locked
+          cargo test --locked
+          cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Verify native binary
+        shell: bash
+        run: target/release/${{ matrix.binary }} --version
+
+      - name: Package binary
+        shell: bash
+        run: |
+          mkdir -p dist
+          tar -czf dist/kvnc-${{ matrix.label }}.tar.gz -C target/release ${{ matrix.binary }}
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: kvnc-${{ matrix.label }}
+          path: dist/
+          if-no-files-found: error

@@ -1,0 +1,62 @@
+# Run `kvnc --init` to create this file automatically. Its per-user location is
+# ~/.config/kvnc/config.toml (or $XDG_CONFIG_HOME/kvnc/config.toml) on macOS/Linux,
+# and %APPDATA%\kvnc\config.toml on Windows. Adjust the trusted listener address.
+# kVNC loads that per-user file automatically during argument-free startup.
+# Bind only to a trusted private-network address. RFB is not encrypted.
+listen = "127.0.0.1:5900"
+# Framebuffer source: "desktop" captures the selected display; "demo" needs no capture permission.
+source = "desktop"
+# Zero-based display index shown by `bin/kvnc --list-monitors`.
+monitor = 0
+# Permit the connected client to control local keyboard and pointer input.
+# Keep false unless the listener and every client are trusted.
+allow_input = false
+# macOS keyboard mapping: "auto" accepts standard keys and unambiguous Japanese keysyms.
+# Use "jis" for a JIS keyboard with Japanese Kana input; "us" disables JIS aliases.
+# This setting is ignored on non-macOS hosts.
+keyboard_layout = "auto"
+# Scale the captured framebuffer from 0.1 to 1.0. 1.0 preserves native capture resolution.
+# Use 0.5 only when bandwidth is more important than sharp text.
+scale = 1.0
+# Maximum full-frame update rate, from 1 to 10 frames per second.
+fps = 2
+# Write RFB handshake and event diagnostics; clipboard contents are never logged.
+debug = true
+# Append diagnostics to this relative or absolute log-file path.
+log_file = "kvnc.log"
+# Built-in rotation schedule: "none" (default), "hourly", "daily", "weekly", or "monthly".
+# "monthly" means 30 days after the previous rotation, not a calendar-month boundary.
+log_rotation = "daily"
+# Rotate early when the active log reaches this many bytes. Zero disables the size limit.
+# 104857600 is 100 MiB.
+log_max_size_bytes = 104857600
+# Retain this many timestamped archive files. Zero deletes every archive after rotation.
+log_retention = 14
+
+# Optional background operation (macOS/Linux only):
+# Detach kVNC after startup. Requires a log_file setting.
+# daemon = true
+# Write the detached process ID to this relative or absolute path. Requires daemon = true.
+# pid_file = "kvnc.pid"
+
+# Optional encrypted username/password login. Generate a verifier without
+# exposing the password in the shell history: bin/kvnc --generate-password-hash
+# Copy the printed password_hash value here. The plaintext password is never
+# stored by kVNC. Omit this complete section to retain password-free operation.
+# [auth]
+# Optional. Omit this key for password-only login; clients must leave username empty.
+# username = "operator"
+# password_hash = "$argon2id$v=19$m=19456,t=2,p=1$..."
+
+# CLI-only options, therefore not TOML settings:
+#   bin/kvnc --help                 Show all command-line options and exit.
+#   bin/kvnc --version              Show the kVNC version and exit.
+#   bin/kvnc --list-monitors        List display indices and exit.
+#   bin/kvnc --print-config         Show effective settings; password hash is redacted.
+#   bin/kvnc --config PATH          Load PATH instead of the per-user configuration file.
+#   bin/kvnc --init                 Create the per-user configuration file safely.
+#   bin/kvnc --config PATH --init   Create PATH instead; add --force to replace it.
+#   bin/kvnc --update-config        Back up the active configuration and add missing defaults.
+#   bin/kvnc --update               Fast-forward a clean Git checkout; --upgrade is an alias.
+#   bin/kvnc --generate-password-hash  Interactively generate auth.password_hash.
+# Config-only startup supports every remaining operational option shown above.

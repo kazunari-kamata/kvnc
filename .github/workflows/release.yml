@@ -1,0 +1,95 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, for example v0.1.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  verify-version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: release
+        shell: bash
+        run: |
+          tag='${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}'
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          test "${tag#v}" = "$version"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: verify-version
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-x64
+            os: ubuntu-latest
+            binary: kvnc
+          - label: linux-arm64
+            os: ubuntu-24.04-arm
+            binary: kvnc
+          - label: windows-x64
+            os: windows-latest
+            binary: kvnc.exe
+          - label: macos-x64
+            os: macos-15-intel
+            binary: kvnc
+          - label: macos-arm64
+            os: macos-14
+            binary: kvnc
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Linux desktop-capture libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libdbus-1-dev libegl1-mesa-dev libgbm-dev libgl1-mesa-dev libpipewire-0.3-dev libwayland-dev libx11-dev libxrandr-dev
+      - name: Build release binary
+        run: cargo build --release --locked
+      - name: Package binary
+        shell: bash
+        run: |
+          mkdir -p dist
+          tar -czf dist/kvnc-${{ matrix.label }}.tar.gz -C target/release ${{ matrix.binary }}
+      - uses: actions/upload-artifact@v6
+        with:
+          name: release-${{ matrix.label }}
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    needs: [verify-version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          path: release-artifacts
+          pattern: release-*
+          merge-multiple: true
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.verify-version.outputs.tag }}
+        shell: bash
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release-artifacts/* --clobber
+          else
+            gh release create "$RELEASE_TAG" release-artifacts/* --title "$RELEASE_TAG" --generate-notes
+          fi
