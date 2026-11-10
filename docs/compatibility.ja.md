@@ -4,7 +4,7 @@ English: [compatibility.en.md](compatibility.en.md)
 
 | Platform | Desktop capture | Clipboard | CI verification |
 | --- | --- | --- | --- |
-| macOS arm64 | Screen Recording permission を許可すると対応 | 対応 | `macos-14` で native build / test |
+| macOS arm64 | Screen Recording permission を許可すると対応 | 対応 | `macos-15` で native build / test |
 | macOS x86_64 | Screen Recording permission を許可すると対応 | 対応 | `macos-15-intel` で native build / test |
 | Windows x86_64 | interactive desktop session で対応 | 対応 | `windows-latest` で native build / test |
 | Linux x86_64 / X11 | interactive desktop session で対応 | 対応 | `ubuntu-latest` で native build / test |

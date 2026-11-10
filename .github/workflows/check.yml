@@ -49,7 +49,10 @@ jobs:
             os: macos-15-intel
             binary: kvnc
           - label: macos-arm64
-            os: macos-14
+            # macos-15 is GitHub's currently supported standard arm64 macOS
+            # runner. The former macos-14 arm64 runner is not available for
+            # this repository's runner configuration.
+            os: macos-15
             binary: kvnc
 
     steps:

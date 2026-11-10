@@ -4,7 +4,7 @@ Japanese: [compatibility.ja.md](compatibility.ja.md).
 
 | Platform | Desktop capture | Clipboard | CI verification |
 | --- | --- | --- | --- |
-| macOS arm64 | Supported with Screen Recording permission | Supported | Native build and tests on `macos-14` |
+| macOS arm64 | Supported with Screen Recording permission | Supported | Native build and tests on `macos-15` |
 | macOS x86_64 | Supported with Screen Recording permission | Supported | Native build and tests on `macos-15-intel` |
 | Windows x86_64 | Supported in an interactive desktop session | Supported | Native build and tests on `windows-latest` |
 | Linux x86_64 / X11 | Supported in an interactive desktop session | Supported | Native build and tests on `ubuntu-latest` |

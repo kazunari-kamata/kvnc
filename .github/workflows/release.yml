@@ -50,7 +50,9 @@ jobs:
             os: macos-15-intel
             binary: kvnc
           - label: macos-arm64
-            os: macos-14
+            # Keep the release build on the same supported native arm64
+            # runner used by the verification workflow.
+            os: macos-15
             binary: kvnc
     steps:
       - uses: actions/checkout@v5
