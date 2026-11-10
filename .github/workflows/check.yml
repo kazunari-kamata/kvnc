@@ -13,6 +13,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  license-notices:
+    name: license-notices
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-about
+        run: cargo install --locked --version 0.9.3 --features cli cargo-about
+      - name: Verify third-party license notices
+        shell: bash
+        run: |
+          scripts/generate-third-party-licenses.sh
+          git diff --exit-code -- THIRD_PARTY_LICENSES.html
+
   check:
     name: ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
@@ -65,8 +80,15 @@ jobs:
       - name: Package binary
         shell: bash
         run: |
-          mkdir -p dist
-          tar -czf dist/kvnc-${{ matrix.label }}.tar.gz -C target/release ${{ matrix.binary }}
+          package_dir="dist/package"
+          archive="dist/kvnc-${{ matrix.label }}.tar.gz"
+          rm -rf "$package_dir"
+          mkdir -p "$package_dir"
+          cp "target/release/${{ matrix.binary }}" LICENSE THIRD_PARTY_LICENSES.html "$package_dir/"
+          tar -czf "$archive" -C "$package_dir" ${{ matrix.binary }} LICENSE THIRD_PARTY_LICENSES.html
+          printf '%s\n' ${{ matrix.binary }} LICENSE THIRD_PARTY_LICENSES.html | sort > dist/expected-contents.txt
+          tar -tzf "$archive" | sort > dist/archive-contents.txt
+          diff --unified=3 dist/expected-contents.txt dist/archive-contents.txt
 
       - uses: actions/upload-artifact@v6
         with:

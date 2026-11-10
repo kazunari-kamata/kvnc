@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Include the project MIT license and generated third-party license notices in every binary archive.
+- Add a locked dependency-license policy and CI verification for the generated notice.
+
 ## 0.1.0
 
 - Initial CLI RFB 3.8 server.

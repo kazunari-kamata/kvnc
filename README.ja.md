@@ -144,7 +144,12 @@ macOS では RFB の printable keysym を physical key code として注入し�
 - [RA2ne / noVNC 相互運用調査](docs/ra2ne-novnc-investigation.ja.md)
 - [貢献方法](CONTRIBUTING.ja.md)
 - [変更履歴](CHANGELOG.md)
+- [第三者ライセンス notice](THIRD_PARTY_LICENSES.html)
 
 ## License
 
-[MIT](LICENSE)
+kVNC は [MIT License](LICENSE) で提供します。各 binary release archive には
+この file と、lock された Rust dependency および各 license 本文を記載する
+`THIRD_PARTY_LICENSES.html` を同梱します。`Cargo.lock` を変更した場合は、
+`cargo-about` 0.9.3 を導入してから
+`scripts/generate-third-party-licenses.sh` で notice を再生成してください。

@@ -145,7 +145,12 @@ On macOS, printable RFB keysyms are injected as physical key codes. This retains
 - [Security policy](docs/security.en.md)
 - [Contributing](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
+- [Third-party license notices](THIRD_PARTY_LICENSES.html)
 
 ## License
 
-[MIT](LICENSE)
+kVNC is licensed under the [MIT License](LICENSE). Each binary release archive
+includes this file and `THIRD_PARTY_LICENSES.html`, which identifies the locked
+Rust dependencies and preserves their full license texts. Regenerate the notice
+after changing `Cargo.lock` with `scripts/generate-third-party-licenses.sh`
+(requires `cargo-about` 0.9.3).
