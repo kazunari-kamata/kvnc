@@ -94,7 +94,7 @@ RFB 3.8 対応 VNC client から `127.0.0.1:5900` に接続します。
 
 `--debug` は RFB handshake と client message を記録します。clipboard の内容自体は記録しません。`--log-file` を指定すると同じ出力を file に追記するため、client の切断調査に利用できます。Extended Clipboard 対応 client とは capability negotiation 後に Notify / Request / Provide を使い、UTF-8 text を zlib 圧縮して双方向同期します。非対応 client には従来どおり `ClientCutText` / `ServerCutText` を使います。
 
-v0.1.0 は client が Hextile を提示した場合に Hextile を選択し、それ以外は Raw を使用します。Hextile は source pixel を落とさない lossless encoding なので、`scale` を下げずに desktop の平坦な部分の転送量を削減できます。初回は全画面 frame を送り、その後の incremental request には変更された最小 rectangle だけを送ります。framebuffer update は最大 1 件まで queue し、`--fps` を上限として capture します。keyboard / pointer event は別処理のため、画面転送が重なっても input event は待たせません。通常は `--fps 5`、帯域を優先する場合は `--fps 1` を使います。
+v0.2.0 は client が Hextile を提示した場合に Hextile を選択し、それ以外は Raw を使用します。Hextile は source pixel を落とさない lossless encoding なので、`scale` を下げずに desktop の平坦な部分の転送量を削減できます。初回は全画面 frame を送り、その後の incremental request には変更された最小 rectangle だけを送ります。framebuffer update は最大 1 件まで queue し、`--fps` を上限として capture します。keyboard / pointer event は別処理のため、画面転送が重なっても input event は待たせません。通常は `--fps 5`、帯域を優先する場合は `--fps 1` を使います。
 
 Hextile を利用しても画面反映が遅い場合にだけ `--scale 0.5` を指定します。Retina の 2880x1800 capture は 1440x900 になり、最悪時の転送量はおよそ4分の1です。`scale = 1.0` は native capture resolution を維持して文字の鮮明さを優先します。input coordinate は縮小後の framebuffer に合わせて自動変換されます。
 

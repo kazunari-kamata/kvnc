@@ -2,8 +2,12 @@
 
 ## Unreleased
 
+## 0.2.0
+
 - Include the project MIT license and generated third-party license notices in every binary archive.
 - Add a locked dependency-license policy and CI verification for the generated notice.
+- Build and verify macOS arm64 artifacts on GitHub's supported `macos-15` runner.
+- Correct the installation security guidance for optional RA2ne authentication.
 
 ## 0.1.0
 

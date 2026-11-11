@@ -48,6 +48,6 @@ The default `127.0.0.1:5900` listener accepts only clients on the same machine. 
 bin/kvnc --source demo --listen SERVER_PRIVATE_IP:5900 --debug --log-file kvnc.log
 ```
 
-First confirm that the demo source connects, then replace `demo` with `desktop`. RFB in v0.1.0 has no encryption or authentication; never expose this listener to an untrusted network.
+First confirm that the demo source connects, then replace `demo` with `desktop`. Password-free RFB has no encryption or authentication. Configuring `[auth]` enables RA2ne authentication, which encrypts only the credential exchange; it does not encrypt the subsequent RFB session. Never expose this listener to an untrusted network.
 
 See [Background operation](docs/daemon.en.md) for `--daemon` and macOS launchd user-agent operation.

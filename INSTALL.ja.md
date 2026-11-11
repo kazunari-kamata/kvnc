@@ -47,6 +47,6 @@ keyboard / pointer の操作を許可するには `--allow-input` を追加し�
 bin/kvnc --source demo --listen SERVER_PRIVATE_IP:5900 --debug --log-file kvnc.log
 ```
 
-まず demo source で接続を確認してから、`demo` を `desktop` に置き換えます。v0.1.0 の RFB は encryption / authentication を提供しないため、この listener を信頼できない network に公開しないでください。
+まず demo source で接続を確認してから、`demo` を `desktop` に置き換えます。password 無しの RFB は encryption / authentication を提供しません。`[auth]` を設定すると RA2ne authentication を有効にし credential exchange だけを暗号化しますが、その後の RFB session は暗号化しません。この listener を信頼できない network に公開しないでください。
 
 `--daemon` と macOS launchd user agent による運用は [バックグラウンド運用](docs/daemon.ja.md) を参照してください。
