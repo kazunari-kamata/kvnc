@@ -98,8 +98,11 @@ jobs:
           RELEASE_TAG: ${{ needs.verify-version.outputs.tag }}
         shell: bash
         run: |
+          shopt -s nullglob
+          archives=(release-artifacts/*.tar.gz)
+          test "${#archives[@]}" -eq 5
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" release-artifacts/* --clobber
+            gh release upload "$RELEASE_TAG" "${archives[@]}" --clobber
           else
-            gh release create "$RELEASE_TAG" release-artifacts/* --title "$RELEASE_TAG" --generate-notes
+            gh release create "$RELEASE_TAG" "${archives[@]}" --title "$RELEASE_TAG" --generate-notes
           fi
