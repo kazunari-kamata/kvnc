@@ -18,4 +18,8 @@ kVNC は `sudo` を使わず、sign-in 中の desktop user として起動しま
 
 ## Windows の設定
 
-kVNC は Windows service ではなく、sign-in 済み interactive user session で起動します。lock screen と UAC secure desktop は保護された別 desktop のため、通常 user session の capture / input 注入の対象外です。Git clone、`--init`、`--update-config`、`--update` の手順は [Windows ガイド](windows.ja.md) を参照してください。
+kVNC は Windows service ではなく、sign-in 済み interactive user session で起動します。lock screen と UAC secure desktop は保護された別 desktop のため、通常 user session の capture / input 注入の対象外です。Git clone、`--init`、`--update-config`、`--update`、logon task、power policy の手順は [Windows ガイド](windows.ja.md) を参照してください。
+
+## Linux の設定
+
+kVNC は root system service や headless の lingering user service ではなく、sign-in 済み graphical user session で起動します。X11 では graphical session の display と X authority が必要です。Wayland の capture / clipboard は compositor と screen-capture portal に依存するため、対象 distribution で `--source demo`、続けて実 desktop を確認してください。`systemd --user` service と任意の `systemd-inhibit` wrapper は[バックグラウンド運用](daemon.ja.md)を参照し、display blanking / screen lock は kVNC ではなく desktop environment 側で設定します。
