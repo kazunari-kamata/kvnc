@@ -1,5 +1,6 @@
 /target/
 /bin/
 /config.toml
+/var/
 /*.log
 /*.pid

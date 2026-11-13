@@ -82,6 +82,34 @@ client on a trusted private network, bind to one specific private-interface
 address and allow only that trusted network in Windows Defender Firewall. Do
 not expose unencrypted RFB to the public Internet.
 
+## Start at sign-in and handle sleep
+
+There is no Windows equivalent of the macOS `caffeinate` wrapper in kVNC, and
+kVNC does not alter the computer's power policy. To restart it at sign-in, use
+**Task Scheduler** to create a task with these properties:
+
+1. On **General**, select the desktop user and choose **Run only when user is logged on**. Do not select “Run whether user is logged on or not,” and do not use a Windows service.
+2. Add an **At log on** trigger for that user.
+3. Add a **Start a program** action whose program is the absolute path to `kvnc.exe`. It reads that user's `%APPDATA%\kvnc\config.toml` without command-line arguments.
+4. In **Settings**, optionally enable restart-on-failure. Keep the task in the interactive user session; it must not be moved to Session 0.
+
+After creating the task, sign out and sign in, then verify the listener from
+the same user session:
+
+```powershell
+Get-Process kvnc
+Get-NetTCPConnection -LocalPort 5900 -State Listen
+Get-Content "$env:APPDATA\kvnc\kvnc.log" -Tail 50
+```
+
+Sleep, hibernation, lock-screen transitions, and the display power timeout can
+make an interactive desktop unavailable for capture or input. Choose the
+appropriate **Settings → System → Power & battery → Screen and sleep** policy
+for the host's trusted remote-access use, and test it on both AC and battery
+power. Do not weaken the lock-screen or power policy merely to run kVNC; a
+locked or secure desktop remains intentionally outside this user-session
+server's scope.
+
 ## Maintain a clone
 
 `--update-config` preserves existing values and comments, adds only missing

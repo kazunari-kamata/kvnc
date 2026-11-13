@@ -531,6 +531,25 @@ struct InputController {
     keyboard_layout: KeyboardLayout,
 }
 
+enum InputInitialization<T> {
+    Disabled,
+    Ready(T),
+    Unavailable(anyhow::Error),
+}
+
+fn initialize_input<T>(
+    allow_input: bool,
+    initialize: impl FnOnce() -> Result<T>,
+) -> InputInitialization<T> {
+    if !allow_input {
+        return InputInitialization::Disabled;
+    }
+    match initialize() {
+        Ok(input) => InputInitialization::Ready(input),
+        Err(error) => InputInitialization::Unavailable(error),
+    }
+}
+
 impl InputController {
     fn new(keyboard_layout: KeyboardLayout) -> Result<Self> {
         Ok(Self {
@@ -962,13 +981,23 @@ async fn main() -> Result<()> {
             auth.public_key_fingerprint
         ));
     }
-    let input = if args.allow_input {
-        let controller = InputController::new(args.keyboard_layout)?;
-        logger.info("local keyboard and pointer input injection enabled");
-        Some(Arc::new(StdMutex::new(controller)))
-    } else {
-        logger.info("local keyboard and pointer input injection disabled");
-        None
+    let input = match initialize_input(args.allow_input, || {
+        InputController::new(args.keyboard_layout)
+    }) {
+        InputInitialization::Disabled => {
+            logger.info("local keyboard and pointer input injection disabled");
+            None
+        }
+        InputInitialization::Ready(controller) => {
+            logger.info("local keyboard and pointer input injection enabled");
+            Some(Arc::new(StdMutex::new(controller)))
+        }
+        InputInitialization::Unavailable(error) => {
+            logger.error(format!(
+                "local keyboard and pointer input injection is unavailable; continuing in view-only mode: {error}"
+            ));
+            None
+        }
     };
     let desktop_monitor = match args.source {
         Source::Desktop => Some(select_monitor(args.monitor)?),
@@ -2823,10 +2852,11 @@ fn set_system_clipboard(text: &str) -> Result<()> {
 mod tests {
     use super::{
         EXTENDED_CLIPBOARD_CAPS, EXTENDED_CLIPBOARD_PROVIDE, EXTENDED_CLIPBOARD_TEXT,
-        ExtendedClipboardMessage, Frame, Key, KeyboardLayout, LogRotation, PixelFormat,
-        RotatingLogFile, SERVER_PIXEL_FORMAT, add_missing_config_defaults, changed_region,
-        demo_frame, encode_hextile, encode_pixels, frame_from_rgba, frame_region,
-        parse_extended_clipboard, read_to_string, rfb_key, unsigned_fixed, write_initial_config,
+        ExtendedClipboardMessage, Frame, InputInitialization, Key, KeyboardLayout, LogRotation,
+        PixelFormat, RotatingLogFile, SERVER_PIXEL_FORMAT, add_missing_config_defaults,
+        changed_region, demo_frame, encode_hextile, encode_pixels, frame_from_rgba, frame_region,
+        initialize_input, parse_extended_clipboard, read_to_string, rfb_key, unsigned_fixed,
+        write_initial_config,
     };
     use flate2::{Compression, write::ZlibEncoder};
     use image::RgbaImage;
@@ -2835,6 +2865,27 @@ mod tests {
     use std::fs;
     use std::io::Write;
     use tempfile::tempdir;
+
+    #[test]
+    fn unavailable_input_initialization_falls_back_to_view_only() {
+        let disabled = initialize_input(false, || -> anyhow::Result<()> {
+            panic!("disabled input must not initialize")
+        });
+        assert!(matches!(disabled, InputInitialization::Disabled));
+
+        let ready = initialize_input(true, || Ok("input"));
+        assert!(matches!(ready, InputInitialization::Ready("input")));
+
+        let unavailable = initialize_input(true, || -> anyhow::Result<()> {
+            Err(anyhow::anyhow!("permission denied"))
+        });
+        match unavailable {
+            InputInitialization::Unavailable(error) => {
+                assert!(error.to_string().contains("permission denied"));
+            }
+            _ => panic!("failed input initialization must use the view-only fallback"),
+        }
+    }
 
     #[test]
     fn size_rotation_retains_only_the_requested_archive_count() {

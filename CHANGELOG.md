@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.3.0
+
+- Keep the authenticated desktop server available in view-only mode when local input injection permission is unavailable.
+- Prevent macOS LaunchAgent desktop capture from failing when displays sleep by running the agent through `caffeinate`.
+- Add Windows interactive logon-task and power-policy guidance, plus Linux graphical `systemd --user` / optional `systemd-inhibit` guidance with X11 and Wayland boundaries.
+- Keep locally generated runtime logs under `var/` out of Git tracking.
+
 ## 0.2.0
 
 - Include the project MIT license and generated third-party license notices in every binary archive.

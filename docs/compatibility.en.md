@@ -21,4 +21,16 @@ Run kVNC as the logged-in desktop user, without `sudo`. Allow the launcher appli
 Run kVNC in the signed-in interactive user session, not as a Windows service.
 The lock screen and UAC secure desktop are protected desktops and are outside
 ordinary user-session capture and input injection. See the [Windows guide](windows.en.md)
-for the Git clone, `--init`, `--update-config`, and `--update` procedures.
+for the Git clone, `--init`, `--update-config`, `--update`, logon-task, and
+power-policy procedures.
+
+## Linux setup
+
+Run kVNC in the logged-in graphical user session, not as a root system service
+or a lingering headless user service. X11 needs the graphical session's display
+and X authority. Wayland capture and clipboard access depend on the compositor
+and screen-capture portal, so validate `--source demo` and then the real
+desktop on the target distribution. See [Background operation](daemon.en.md)
+for a `systemd --user` service and optional `systemd-inhibit` wrapper; configure
+display blanking and screen locking in the desktop environment rather than in
+kVNC.

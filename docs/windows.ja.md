@@ -62,6 +62,25 @@ desktop monitor を選択する前に一覧を確認します。
 
 Windows lock screen と UAC secure desktop は別の保護された desktop です。通常の user session からの capture / input 注入は期待しないでください。trusted private network の client を受ける場合は特定の private interface address に bind し、Windows Defender Firewall でも当該 trusted network だけを許可します。unencrypted RFB を public Internet に公開してはいけません。
 
+## sign-in 時の起動と sleep の扱い
+
+kVNC には macOS の `caffeinate` wrapper に相当する Windows 機能はなく、computer の power policy も変更しません。sign-in 時に再起動するには、**Task Scheduler** で次の内容の task を作成します。
+
+1. **General** で desktop user を選び、**Run only when user is logged on** を選択します。**Run whether user is logged on or not** は選ばず、Windows service も使用しません。
+2. その user の **At log on** trigger を追加します。
+3. **Start a program** action の program に、`kvnc.exe` の absolute path を指定します。command-line argument は不要で、当該 user の `%APPDATA%\kvnc\config.toml` を読みます。
+4. **Settings** では必要に応じて restart-on-failure を有効にします。task は interactive user session 内に留め、Session 0 へ移してはいけません。
+
+task 作成後は sign-out / sign-in して、同じ user session から listener を確認します。
+
+```powershell
+Get-Process kvnc
+Get-NetTCPConnection -LocalPort 5900 -State Listen
+Get-Content "$env:APPDATA\kvnc\kvnc.log" -Tail 50
+```
+
+sleep、hibernation、lock-screen transition、display power timeout により、interactive desktop が capture / input に使えなくなることがあります。trusted remote access 用 host の **Settings → System → Power & battery → Screen and sleep** は AC / battery の両方で意図どおりか確認してください。kVNC のためだけに lock-screen や power policy を弱めてはいけません。locked / secure desktop は、この user-session server の対象外です。
+
 ## clone の保守
 
 `--update-config` は既存 value / comment を保ったまま、未設定の top-level default だけを追加します。実行前の config は同じ directory に timestamp 付きで backup されます。
