@@ -10,6 +10,7 @@ Pull Request 前に次を実行します。
 cargo fmt --check
 cargo test --locked
 cargo clippy --all-targets --locked -- -D warnings
+bash -n scripts/kvncctl
 ```
 
 `Cargo.lock` を変更した場合は、pinned generator で third-party notice を再生成し、
@@ -21,6 +22,6 @@ scripts/generate-third-party-licenses.sh
 git diff --check
 ```
 
-user-facing document を変更するときは、両言語版を更新します。protocol、listener、clipboard、background operation の変更では、必ず [検証ガイド](docs/verification.ja.md) に従ってください。
+user-facing document を変更するときは、両言語版を更新します。protocol、listener、clipboard、background operation の変更では、必ず [検証ガイド](docs/verification.ja.md) に従ってください。lifecycle を変更する場合は `source = "demo"` の `scripts/kvncctl` daemon smoke sequence を実行し、macOS では `caffeinate` wrapper を kill せず、既存 LaunchAgent を `scripts/kvncctl status` で確認してください。
 
 少なくとも `--source demo` と debug log を使って検証します。RFB handshake を変更した場合は RFB `003.008` と `003.003` の両方を検証し、listener を変更した場合は別の trusted host から指定した bind address を検証します。desktop capture の変更は、変更した各 OS の interactive desktop session で smoke test を実施してください。unauthenticated non-loopback の例は、private-network boundary を説明せずに追加してはいけません。
