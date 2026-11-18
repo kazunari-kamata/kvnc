@@ -1,6 +1,18 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
+
+- Add `scripts/install-windows.ps1` and its Command Prompt wrapper to check the Rust MSVC toolchain, make a locked release build, deploy `bin\kvnc.exe`, and safely initialize a missing per-user configuration without starting kVNC or overwriting an existing configuration.
+- Replace macOS desktop snapshots with a live CoreGraphics `CGDisplayStream`, so compositor changes such as application windows and menu popovers continue to reach VNC clients after a display wake.
+- Add `all_monitors` / `--all-monitors` to compose every available display into one position-preserving virtual-desktop VNC framebuffer, with per-display pointer routing.
+- Add safe `scripts/kvncctl` and `scripts/kvncctl.ps1` helpers for managed start, stop, restart, status, and logs; document LaunchAgent `caffeinate` lifecycle and parallel development instances.
+- Add `scripts/kvncctl.cmd` as a Command Prompt launcher for the reviewed Windows PowerShell controller.
+- Support safe `--update` operation in clean JJ checkouts as well as standard Git clones, without leaving Cargo installation metadata in the checkout.
+- Use a one-time macOS LaunchAgent startup wake before desktop capture, then permit normal display sleep while retaining idle-system-sleep inhibition.
+- Add opt-in platform-native display wake on a successful desktop VNC connection through `wake_display_on_connect`: macOS wakes then holds the display only for the authenticated client lifetime, Windows uses an execution state, and Linux uses X11 DPMS or Wayland session-idle inhibition.
+- Treat an empty or non-text local clipboard as normal, preventing repeated error-log entries while preserving the last synchronized text clipboard value.
+- Reacquire the selected desktop monitor after a display wake or reconfiguration, use current framebuffer geometry for pointer injection, and log the selected monitor identity and geometry.
+- On macOS, complete the short `caffeinate -u -t 5` recovery before acquiring the active-client display assertion or processing framebuffer requests. This matches the documented manual SSH recovery sequence while still allowing display sleep when no client is connected.
 
 ## 0.3.0
 

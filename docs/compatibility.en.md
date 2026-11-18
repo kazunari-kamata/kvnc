@@ -14,7 +14,7 @@ Japanese: [compatibility.ja.md](compatibility.ja.md).
 
 ## macOS setup
 
-Run kVNC as the logged-in desktop user, without `sudo`. Allow the launcher application in **System Settings → Privacy & Security → Screen Recording**, then fully restart that launcher. Use `--source demo --debug --log-file kvnc.log` to first confirm the RFB connection independently of Screen Recording permission.
+Run kVNC as the logged-in desktop user, without `sudo`. Allow the launcher application in **System Settings → Privacy & Security → Screen Recording**, then fully restart that launcher. A LaunchAgent runs the standalone `kvnc` executable rather than Terminal, so grant Screen Recording to `kvnc` itself as well; Terminal permission alone does not grant the LaunchAgent access to the live CoreGraphics capture stream. Use `--source demo --debug --log-file kvnc.log` to first confirm the RFB connection independently of Screen Recording permission.
 
 ## Windows setup
 
@@ -22,7 +22,9 @@ Run kVNC in the signed-in interactive user session, not as a Windows service.
 The lock screen and UAC secure desktop are protected desktops and are outside
 ordinary user-session capture and input injection. See the [Windows guide](windows.en.md)
 for the Git clone, `--init`, `--update-config`, `--update`, logon-task, and
-power-policy procedures.
+power-policy procedures. `wake_display_on_connect` uses a five-second Windows
+display execution request after a successful desktop VNC connection; it does
+not unlock the protected desktops.
 
 ## Linux setup
 
@@ -32,5 +34,7 @@ and X authority. Wayland capture and clipboard access depend on the compositor
 and screen-capture portal, so validate `--source demo` and then the real
 desktop on the target distribution. See [Background operation](daemon.en.md)
 for a `systemd --user` service and optional `systemd-inhibit` wrapper; configure
-display blanking and screen locking in the desktop environment rather than in
-kVNC.
+screen locking in the desktop environment. `wake_display_on_connect` supports
+X11 through `xset` screen-saver/DPMS reset and Wayland through the standard
+session-idle inhibition interface; Wayland cannot universally force a physical
+monitor on, so smoke-test the target compositor.

@@ -56,12 +56,13 @@ With the client connected to the demo source, use disposable plain text:
 2. Copy different text in a local editor on the kVNC host and paste it into the client.
 3. With an Extended Clipboard-capable client, confirm `extended clipboard capabilities received` and `extended clipboard received` in the log. A legacy client logs clipboard byte counts instead.
 4. Confirm that `var/kvnc.log` never contains clipboard contents.
+5. Clear the host clipboard or copy a non-text item, then confirm that no repeated `could not read system clipboard` error is written. The client's last synchronized text should remain unchanged.
 
 ## 4. Verify desktop capture
 
-Only after the demo test passes, run `--source desktop` from an interactive desktop login. On macOS, allow the launcher in **System Settings → Privacy & Security → Screen Recording**, restart the launcher, and do not use `sudo`. If the server reports `no monitor is available`, stop protocol investigation: the host has no captureable desktop context, display, or permission.
+Only after the demo test passes, run `--source desktop` from an interactive desktop login. On macOS, allow the launcher in **System Settings → Privacy & Security → Screen Recording**, restart the launcher, and do not use `sudo`. At startup, record `desktop monitor selected` from the log and compare its name, primary flag, origin, dimensions, and scale factor with `bin/kvnc --list-monitors`; current macOS builds also log the selected capture backend. Monitor indices can change when the operating system reconfigures displays. If the server reports `no monitor is available`, stop protocol investigation: the host has no captureable desktop context, display, or permission.
 
-If the image is uniformly black, first unlock the Mac and wake its displays. While `system_profiler SPDisplaysDataType` reports `Display Asleep: Yes` for a display, macOS can return a black capture image. To prevent sleep during continuous operation, run `caffeinate -dimsu` in a trusted local session and stop it with `Ctrl-C` when finished.
+If the image is uniformly black or stops updating after a wake, first unlock the Mac and wake its displays. While `system_profiler SPDisplaysDataType` reports `Display Asleep: Yes` for a display, macOS can return a black capture image. With `wake_display_on_connect = true`, reconnect after deploying this version and confirm that the log records `macOS display wake completed before framebuffer processing`, followed by `acquired macOS active-client display assertion`; kVNC keeps that assertion only until the authenticated VNC client disconnects. Current builds record `macOS desktop capture backend: CoreGraphics CGDisplayStream`; this is the live compositor capture path that must be active before testing window and menu updates. If the log instead reports `macOS desktop capture backend fallback`, the launch context is missing Screen Recording permission for the standalone `kvnc` binary. kVNC remains available with a compatibility snapshot, but grant that permission and restart it before expecting live window or menu updates. Then make a local menu or window change and confirm that `framebuffer update sent` appears rather than only `framebuffer delta sent: unchanged`. If the live backend is recorded but the physical desktop changes still do not produce an update, retain the `desktop monitor selected`, backend, and framebuffer-delta log lines for investigation. For managed desktop capture, use the documented LaunchAgent wrapper: it performs a one-time startup wake before capture and otherwise permits normal display sleep.
 
 ## 5. Verify background operation
 
@@ -69,7 +70,7 @@ On macOS or Linux, confirm `--daemon` leaves a listener, writes the requested PI
 
 ## 6. Verify remote input and multiple monitors
 
-Use `--list-monitors` to obtain stable zero-based indices. Start a separate kVNC process and listener port for each monitor; this provides one independent RFB framebuffer per display.
+Use `--list-monitors` to obtain stable zero-based indices. Start a separate kVNC process and listener port for each monitor when independent RFB framebuffers are desired.
 
 ```sh
 bin/kvnc --list-monitors
@@ -77,13 +78,26 @@ bin/kvnc --source desktop --monitor 0 --allow-input --listen 127.0.0.1:5900
 bin/kvnc --source desktop --monitor 1 --allow-input --listen 127.0.0.1:5901
 ```
 
+For one macOS-style VNC desktop spanning every display, run one process with
+`--all-monitors` instead. It preserves the displays' desktop positions; gaps or
+offsets become black regions in the VNC framebuffer. Verify a visible window on
+each physical display is visible in its matching VNC region, then click near
+each display's corners. The log line `desktop virtual-desktop selected` gives
+the selected count, and each `pointer event injected` line includes
+`monitor_index` and that display's origin. `--all-monitors` takes precedence
+over `--monitor`.
+
+```sh
+bin/kvnc --source desktop --all-monitors --allow-input --listen 127.0.0.1:5900
+```
+
 Verify pointer movement, left/middle/right buttons, wheel scrolling, text keys, modifier keys, navigation keys, and F1–F12. On macOS, grant the launcher Accessibility permission before this test. Do not enable input on an untrusted network.
 
-On a Retina primary display, kVNC converts captured framebuffer pixels to macOS logical input points using the selected monitor's scale factor. Confirm that a click near each corner lands at the corresponding local-screen position.
+On a Retina primary display, kVNC converts captured framebuffer pixels to macOS logical input points using the selected monitor's scale factor. In all-monitor mode it normalizes each display to the same logical desktop grid before compositing and uses the matching display's origin for input. Confirm that a click near each corner lands at the corresponding local-screen position.
 
 ### Drag-selection diagnosis
 
-Start with a new debug log, then make exactly one slow left-button drag across disposable text. kVNC logs time to millisecond precision. A valid drag contains an initial `mask=0x01`, one or more following `mask=0x01` pointer events with changing coordinates, then `mask=0x00`. Each `client message: PointerEvent` must be immediately followed by its matching `pointer event injected` line with the same coordinates. If the held-button events are absent, the client or bridge did not send a drag; if they are present and injection is immediate but macOS selects the wrong text, capture the matching log excerpt for kVNC input investigation.
+Start with a new debug log, then make exactly one slow left-button drag across disposable text. kVNC logs time to millisecond precision. A valid drag contains an initial `mask=0x01`, one or more following `mask=0x01` pointer events with changing coordinates, then `mask=0x00`. Each `client message: PointerEvent` must be immediately followed by its matching `pointer event injected` line with the same coordinates. The injected line records `frame_origin_x`, `frame_origin_y`, and `input_scale`; after a wake, these must match the current selected display. If the held-button events are absent, the client or bridge did not send a drag; if they are present and injection is immediate but macOS selects the wrong text, capture the matching log excerpt for kVNC input investigation.
 
 ```sh
 rg -n 'PointerEvent|pointer event injected' var/kvnc.log | tail -n 80

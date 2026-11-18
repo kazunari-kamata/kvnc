@@ -1,0 +1,286 @@
+#!/usr/bin/env bash
+# Manage one kVNC development or runtime instance without killing unrelated processes.
+set -euo pipefail
+
+script_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repository_root="$(cd -- "$script_directory/.." && pwd)"
+kvnc_binary="${KVNC_BIN:-$repository_root/bin/kvnc}"
+config_path="${KVNC_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/kvnc/config.toml}"
+pid_file="${KVNC_PID_FILE:-$repository_root/var/kvnc.pid}"
+log_file="${KVNC_LOG_FILE:-$repository_root/var/kvnc.log}"
+listen_port="${KVNC_LISTEN_PORT:-5900}"
+launch_agent_label="${KVNC_LAUNCH_AGENT_LABEL:-com.kazunari-kamata.kvnc}"
+launch_agent_plist="${KVNC_LAUNCH_AGENT_PLIST:-$HOME/Library/LaunchAgents/$launch_agent_label.plist}"
+management_mode="auto"
+action=""
+
+usage() {
+    cat <<'EOF'
+Usage: scripts/kvncctl [options] <start|stop|restart|status|logs>
+
+Safely manages only one kVNC instance:
+  macOS LaunchAgent mode controls com.kazunari-kamata.kvnc with launchctl.
+  daemon mode controls only the process recorded in the chosen PID file.
+  Unknown kVNC or caffeinate processes are never killed by this helper.
+
+Options:
+  --launch-agent        Use the macOS LaunchAgent mode explicitly.
+  --daemon              Use the macOS/Linux daemon + PID-file mode explicitly.
+  --config PATH         Configuration read when starting a daemon.
+  --pid-file PATH       PID file managed in daemon mode.
+  --log-file PATH       Log file followed by the logs action.
+  --port PORT           Listener port shown by status (default: 5900).
+  -h, --help            Show this help.
+
+With no explicit mode, macOS uses LaunchAgent mode when its plist exists;
+otherwise daemon mode is selected. Daemon start adds --daemon and --pid-file,
+so the configuration must provide log_file. Use a separate config, PID file,
+log file, and port for a parallel development instance.
+EOF
+}
+
+die() {
+    printf 'kvncctl: %s\n' "$*" >&2
+    exit 1
+}
+
+require_option_value() {
+    [[ $# -ge 2 ]] || die "$1 requires a value"
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        start|stop|restart|status|logs)
+            [[ -z "$action" ]] || die "only one action may be supplied"
+            action="$1"
+            ;;
+        --launch-agent)
+            management_mode="launch-agent"
+            ;;
+        --daemon)
+            management_mode="daemon"
+            ;;
+        --config)
+            require_option_value "$@"
+            config_path="$2"
+            shift
+            ;;
+        --pid-file)
+            require_option_value "$@"
+            pid_file="$2"
+            shift
+            ;;
+        --log-file)
+            require_option_value "$@"
+            log_file="$2"
+            shift
+            ;;
+        --port)
+            require_option_value "$@"
+            listen_port="$2"
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            die "unknown option or action: $1"
+            ;;
+    esac
+    shift
+done
+
+[[ -n "$action" ]] || {
+    usage >&2
+    exit 1
+}
+
+if [[ "$management_mode" == "auto" ]]; then
+    if [[ "$(uname -s)" == "Darwin" && -f "$launch_agent_plist" ]]; then
+        management_mode="launch-agent"
+    else
+        management_mode="daemon"
+    fi
+fi
+
+if [[ "$management_mode" == "launch-agent" && "$(uname -s)" != "Darwin" ]]; then
+    die "--launch-agent is available only on macOS"
+fi
+
+show_listener() {
+    if command -v lsof >/dev/null 2>&1; then
+        printf 'Listeners on TCP port %s:\n' "$listen_port"
+        if ! lsof -nP -iTCP:"$listen_port" -sTCP:LISTEN; then
+            printf '  none found\n'
+        fi
+    else
+        printf 'lsof is unavailable; cannot inspect TCP port %s.\n' "$listen_port"
+    fi
+}
+
+launch_agent_target() {
+    printf 'gui/%s/%s' "$(id -u)" "$launch_agent_label"
+}
+
+launch_agent_loaded() {
+    launchctl print "$(launch_agent_target)" >/dev/null 2>&1
+}
+
+launch_agent_status() {
+    if launch_agent_loaded; then
+        printf 'LaunchAgent is loaded: %s\n' "$(launch_agent_target)"
+        launchctl print "$(launch_agent_target)"
+    else
+        printf 'LaunchAgent is not loaded: %s\n' "$(launch_agent_target)"
+    fi
+    show_listener
+}
+
+start_launch_agent() {
+    [[ -f "$launch_agent_plist" ]] || die "LaunchAgent plist does not exist: $launch_agent_plist"
+    if launch_agent_loaded; then
+        launchctl kickstart -k "$(launch_agent_target)"
+        printf 'Restarted LaunchAgent: %s\n' "$(launch_agent_target)"
+    else
+        launchctl bootstrap "gui/$(id -u)" "$launch_agent_plist"
+        printf 'Started LaunchAgent: %s\n' "$(launch_agent_target)"
+    fi
+}
+
+stop_launch_agent() {
+    if launch_agent_loaded; then
+        # bootout unloads the job, so KeepAlive cannot restart its caffeinate wrapper.
+        launchctl bootout "$(launch_agent_target)"
+        printf 'Stopped and unloaded LaunchAgent: %s\n' "$(launch_agent_target)"
+    else
+        printf 'LaunchAgent is not loaded; nothing to stop.\n'
+    fi
+}
+
+read_pid() {
+    [[ -r "$pid_file" ]] || return 1
+    local value
+    value="$(tr -d '[:space:]' < "$pid_file")"
+    [[ "$value" =~ ^[1-9][0-9]*$ ]] || return 1
+    printf '%s\n' "$value"
+}
+
+managed_process_command() {
+    local pid="$1"
+    ps -p "$pid" -o command= 2>/dev/null || true
+}
+
+is_managed_daemon() {
+    local pid="$1"
+    kill -0 "$pid" 2>/dev/null || return 1
+    local command_line
+    command_line="$(managed_process_command "$pid")"
+    [[ "$command_line" == *"$kvnc_binary"* ]]
+}
+
+daemon_status() {
+    local pid
+    if ! pid="$(read_pid)"; then
+        printf 'No managed daemon PID file: %s\n' "$pid_file"
+    elif ! kill -0 "$pid" 2>/dev/null; then
+        printf 'Stale daemon PID file: %s (PID %s is not running)\n' "$pid_file" "$pid"
+    elif is_managed_daemon "$pid"; then
+        printf 'Managed daemon is running: PID %s\n' "$pid"
+        printf 'Command: %s\n' "$(managed_process_command "$pid")"
+    else
+        printf 'PID file %s names PID %s, but it is not the expected kVNC binary; refusing to manage it.\n' "$pid_file" "$pid"
+    fi
+    show_listener
+}
+
+start_daemon() {
+    [[ -x "$kvnc_binary" ]] || die "kVNC binary is not executable: $kvnc_binary"
+    [[ -f "$config_path" ]] || die "configuration does not exist: $config_path; run '$kvnc_binary --init' first"
+
+    local pid
+    if pid="$(read_pid)"; then
+        if is_managed_daemon "$pid"; then
+            printf 'Managed daemon is already running: PID %s\n' "$pid"
+            return 0
+        fi
+        if kill -0 "$pid" 2>/dev/null; then
+            die "PID file names a different live process (PID $pid); inspect it before changing $pid_file"
+        fi
+        rm -f "$pid_file"
+        printf 'Removed stale PID file: %s\n' "$pid_file"
+    fi
+
+    mkdir -p "$(dirname -- "$pid_file")"
+    "$kvnc_binary" --config "$config_path" --daemon --pid-file "$pid_file" --log-file "$log_file"
+
+    for _ in {1..20}; do
+        if pid="$(read_pid)" && is_managed_daemon "$pid"; then
+            printf 'Started managed daemon: PID %s\n' "$pid"
+            return 0
+        fi
+        sleep 0.25
+    done
+    die "kVNC did not remain running; inspect $log_file"
+}
+
+stop_daemon() {
+    local pid
+    if ! pid="$(read_pid)"; then
+        printf 'No managed daemon PID file; nothing to stop.\n'
+        return 0
+    fi
+    if ! kill -0 "$pid" 2>/dev/null; then
+        rm -f "$pid_file"
+        printf 'Removed stale PID file: %s\n' "$pid_file"
+        return 0
+    fi
+    is_managed_daemon "$pid" || die "PID $pid is not the expected kVNC binary; refusing to signal it"
+
+    kill -TERM "$pid"
+    for _ in {1..40}; do
+        if ! kill -0 "$pid" 2>/dev/null; then
+            rm -f "$pid_file"
+            printf 'Stopped managed daemon: PID %s\n' "$pid"
+            return 0
+        fi
+        sleep 0.25
+    done
+    die "kVNC PID $pid did not exit after SIGTERM; inspect it before using a stronger signal"
+}
+
+case "$management_mode:$action" in
+    launch-agent:start)
+        start_launch_agent
+        ;;
+    launch-agent:stop)
+        stop_launch_agent
+        ;;
+    launch-agent:restart)
+        stop_launch_agent
+        start_launch_agent
+        ;;
+    launch-agent:status)
+        launch_agent_status
+        ;;
+    daemon:start)
+        start_daemon
+        ;;
+    daemon:stop)
+        stop_daemon
+        ;;
+    daemon:restart)
+        stop_daemon
+        start_daemon
+        ;;
+    daemon:status)
+        daemon_status
+        ;;
+    *:logs)
+        [[ -f "$log_file" ]] || die "log file does not exist: $log_file"
+        exec tail -n 100 -f "$log_file"
+        ;;
+    *)
+        die "unsupported mode/action combination: $management_mode/$action"
+        ;;
+esac

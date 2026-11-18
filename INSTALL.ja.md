@@ -17,13 +17,15 @@ sudo apt-get install libdbus-1-dev libpipewire-0.3-dev libwayland-dev libx11-dev
 ## Standalone executable の作成
 
 ```sh
-cargo install --path . --root . --force --locked
+cargo build --release --locked
+mkdir -p bin
+cp target/release/kvnc bin/kvnc
 bin/kvnc --version
 ```
 
-`bin/kvnc` は現在の platform 用 native executable です。実行時に Cargo は不要です。
+`bin/kvnc` は現在の platform 用 native executable です。実行時に Cargo は不要です。build output は ignore 済みの `target/` 配下に残るため、`--update` 用の source checkout を汚しません。
 
-Windows では PowerShell から `.\bin\kvnc.exe` を実行します。clone、設定、update の全手順は [Windows ガイド](docs/windows.ja.md) を参照してください。
+Windows では clone 後に `scripts\install-windows.ps1` を実行します。`bin\kvnc.exe` のbuild / 配置と、必要時だけper-user設定の安全な生成を行います。clone、設定、update の全手順は [Windows ガイド](docs/windows.ja.md) を参照してください。
 
 ## 起動
 

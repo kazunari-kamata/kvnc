@@ -20,12 +20,14 @@ Windows の Git clone、PowerShell command、desktop session の注意点、保�
 現在の platform 用 native standalone binary を作成します。
 
 ```sh
-cargo install --path . --root . --force --locked
+cargo build --release --locked
+mkdir -p bin
+cp target/release/kvnc bin/kvnc
 bin/kvnc --version
 bin/kvnc --source desktop --listen 127.0.0.1:5900 --debug --log-file kvnc.log
 ```
 
-作成された `bin/kvnc` は Cargo を介さず直接実行できます。OS から求められた場合は desktop capture 権限を許可してください。
+配置した `bin/kvnc` は Cargo を介さず直接実行できます。`target/` 配下で build するため、後の `--update` に必要な source checkout を汚しません。OS から求められた場合は desktop capture 権限を許可してください。
 
 ## 設定ファイルによる起動
 
@@ -52,7 +54,9 @@ bin/kvnc --config /path/to/kvnc.toml
 | `listen` | `--listen` | socket address。既定 `127.0.0.1:5900` |
 | `source` | `--source` | `desktop` または `demo`。既定 `desktop` |
 | `monitor` | `--monitor` | `--list-monitors` の zero-based index。省略時 primary display |
+| `all_monitors` | `--all-monitors` | すべての display を1枚の仮想 desktop に合成。`monitor` より優先。既定 `false` |
 | `allow_input` | `--allow-input` | boolean。既定 `false` |
+| `wake_display_on_connect` | `--wake-display-on-connect` | desktop client の接続成功後: macOS は5秒間の display wake 完了を framebuffer request 処理前に待ち、その client が切断するまで display assertion を保持、Windows は5秒の display execution request、Linux は X11 reset/DPMS-on または Wayland session-idle inhibition。既定 `false` |
 | `keyboard_layout` | `--keyboard-layout` | macOS input 用の `auto`、`us`、`jis`。既定 `auto` |
 | `scale` | `--scale` | `0.1` から `1.0`。既定 `1.0` |
 | `fps` | `--fps` | `1` から `10`。既定 `2` |
@@ -67,6 +71,10 @@ bin/kvnc --config /path/to/kvnc.toml
 | `[auth].password_hash` | `--generate-password-hash`（生成のみ） | plaintext password ではない Argon2id PHC verifier |
 
 `--help`、`--version`、`--list-monitors`、`--print-config`、`--config <PATH>`、`--init`、`--update-config`、`--update` / `--upgrade` は実行時専用のため TOML key はありません。`--print-config` は有効な設定を表示し、password verifier は伏せ字にします。`--update-config` は timestamp 付き backup を作成し、既存 value を置き換えずに未設定の安全な default を追加します。configuration file の unknown key は error になります。
+
+### source checkout の更新
+
+`--update`（`--upgrade` も同義）は clean な source checkout だけを更新・再buildし、download 済み Release archive は変更しません。通常の Git checkout では upstream を持つ branch を checkout している必要があり、`git pull --ff-only` で更新します。JJ checkout では working-copy change が空である必要があり、kVNC は `jj git fetch` の後に `main@origin` を親とする新しい空 change を作成します。空でない JJ change は保持するため更新を拒否します。いずれも feature / Pull Request 用ではなく、kVNC 実行専用の clone から更新してください。macOS / Linux では、rebuild 済みの `target/release/kvnc` が自動的に `bin/kvnc` に置き換わります。
 
 daemon を使うときは `daemon = true` に変更します。`log_file` と `pid_file` を設定したうえで、同じく引数なしで起動できます。
 
@@ -92,7 +100,7 @@ bin/kvnc --source demo --listen 127.0.0.1:5900
 
 RFB 3.8 対応 VNC client から `127.0.0.1:5900` に接続します。
 
-`--debug` は RFB handshake と client message を記録します。clipboard の内容自体は記録しません。`--log-file` を指定すると同じ出力を file に追記するため、client の切断調査に利用できます。Extended Clipboard 対応 client とは capability negotiation 後に Notify / Request / Provide を使い、UTF-8 text を zlib 圧縮して双方向同期します。非対応 client には従来どおり `ClientCutText` / `ServerCutText` を使います。
+`--debug` は RFB handshake と client message を記録します。clipboard の内容自体は記録しません。`--log-file` を指定すると同じ出力を file に追記するため、client の切断調査に利用できます。Extended Clipboard 対応 client とは capability negotiation 後に Notify / Request / Provide を使い、UTF-8 text を zlib 圧縮して双方向同期します。非対応 client には従来どおり `ClientCutText` / `ServerCutText` を使います。local clipboard が空、または text 以外の場合は正常状態として扱い、最後に同期した text を維持し、polling ごとに error log を出しません。
 
 v0.2.0 は client が Hextile を提示した場合に Hextile を選択し、それ以外は Raw を使用します。Hextile は source pixel を落とさない lossless encoding なので、`scale` を下げずに desktop の平坦な部分の転送量を削減できます。初回は全画面 frame を送り、その後の incremental request には変更された最小 rectangle だけを送ります。framebuffer update は最大 1 件まで queue し、`--fps` を上限として capture します。keyboard / pointer event は別処理のため、画面転送が重なっても input event は待たせません。通常は `--fps 5`、帯域を優先する場合は `--fps 1` を使います。
 
@@ -128,6 +136,21 @@ bin/kvnc --list-monitors
 bin/kvnc --source desktop --monitor 1 --allow-input --listen 127.0.0.1:5901
 ```
 
+macOS 標準の画面共有に近い、接続中の全 display を1枚の VNC 画面として使う場合は、
+`--all-monitors`（user configuration では `all_monitors = true`）を使用します。kVNC は
+desktop 上の相対位置で画面を合成するため、display 間の物理的な隙間や上下のずれも VNC
+framebuffer 内では黒い領域として残ります。pointer input は pointer 下の display に戻して
+注入します。`all_monitors` は `monitor` より優先されます。合成後の desktop は各 display
+より大きくなるため、文字の鮮明さを優先する場合はまず `scale = 1.0` で開始し、trusted
+network の帯域が足りない場合だけ下げてください。Retina Mac panel と 4K display のような
+mixed-DPI desktop では、位置と pointer routing を正しく保つため、all-monitor mode は各 image
+を macOS の論理 desktop grid に正規化します。このため `scale = 1.0` はこの mode で最も鮮明な
+設定ですが、built-in panel を native 2x Retina framebuffer として配信するものではありません。
+
+```sh
+bin/kvnc --source desktop --all-monitors --allow-input --listen 127.0.0.1:5900
+```
+
 macOS の `--allow-input` には、起動元 application の Accessibility permission も必要です。
 
 macOS では RFB の printable keysym を physical key code として注入します。これは UTF-8 の変換ではなく JIS keyboard と IME の key binding を保持するためです。`keyboard_layout = "jis"`（または `--keyboard-layout jis`）は JIS の `@`（濁点）、`[`（半濁点）、`^`（へ）、`¥`（長音）、`ろ`、`け`、`む`の keysym をそれぞれ macOS JIS key code へ変換し、「日本語 - かな入力」での直接かな入力に使用します。通常の配列では既定の `auto` を使います。debug log には keysym 値だけを残し、入力文字列は記録しません。
@@ -139,6 +162,7 @@ macOS では RFB の printable keysym を physical key code として注入し�
 - [プロトコルと security model](docs/protocol.ja.md)
 - [対応環境](docs/compatibility.ja.md)
 - [バックグラウンド運用](docs/daemon.ja.md)
+- [起動・停止・再起動と開発時の運用](docs/control.ja.md)
 - [検証ガイド](docs/verification.ja.md)
 - [Security policy](docs/security.ja.md)
 - [RA2ne / noVNC 相互運用調査](docs/ra2ne-novnc-investigation.ja.md)

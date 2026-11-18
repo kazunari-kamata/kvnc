@@ -80,6 +80,23 @@ jobs:
         shell: bash
         run: target/release/${{ matrix.binary }} --version
 
+      - name: Verify Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $config = Join-Path $env:RUNNER_TEMP "kvnc-installer-test\config.toml"
+          .\scripts\install-windows.ps1 -Config $config
+          if (-not (Test-Path -LiteralPath .\bin\kvnc.exe -PathType Leaf)) {
+            throw "installer did not deploy bin\\kvnc.exe"
+          }
+          if (-not (Test-Path -LiteralPath $config -PathType Leaf)) {
+            throw "installer did not create the requested configuration"
+          }
+          if (-not (Select-String -LiteralPath $config -Pattern '^allow_input = false$' -Quiet)) {
+            throw "installer configuration is not input-disabled by default"
+          }
+          .\bin\kvnc.exe --config $config --print-config
+
       - name: Package binary
         shell: bash
         run: |

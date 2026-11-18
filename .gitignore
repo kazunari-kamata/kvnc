@@ -1,6 +1,9 @@
 /target/
 /bin/
+/.crates.toml
+/.crates2.json
 /config.toml
+/config.*.toml
 /var/
 /*.log
 /*.pid

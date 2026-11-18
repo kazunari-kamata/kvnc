@@ -22,12 +22,14 @@ binary is `bin\\kvnc.exe` and is invoked as `.\\bin\\kvnc.exe`.
 Build a native standalone binary for the current platform:
 
 ```sh
-cargo install --path . --root . --force --locked
+cargo build --release --locked
+mkdir -p bin
+cp target/release/kvnc bin/kvnc
 bin/kvnc --version
 bin/kvnc --source desktop --listen 127.0.0.1:5900 --debug --log-file kvnc.log
 ```
 
-The installed `bin/kvnc` runs directly without Cargo. Grant desktop-capture permission when the operating system asks for it.
+The copied `bin/kvnc` runs directly without Cargo. Building under `target/` keeps the source checkout clean for later `--update` use. Grant desktop-capture permission when the operating system asks for it.
 
 ## Configuration-file startup
 
@@ -54,7 +56,9 @@ Without a configuration file, argument-free startup retains the existing default
 | `listen` | `--listen` | Socket address; default `127.0.0.1:5900` |
 | `source` | `--source` | `desktop` or `demo`; default `desktop` |
 | `monitor` | `--monitor` | Zero-based index from `--list-monitors`; primary display when omitted |
+| `all_monitors` | `--all-monitors` | Compose all available displays into one virtual desktop; takes precedence over `monitor`; default `false` |
 | `allow_input` | `--allow-input` | Boolean; default `false` |
+| `wake_display_on_connect` | `--wake-display-on-connect` | After a successful desktop-client handshake: macOS completes its five-second display wake before processing framebuffer requests, then holds a display assertion until that client disconnects; Windows uses a 5-second display execution request; Linux uses X11 reset/DPMS-on or Wayland session-idle inhibition; default `false` |
 | `keyboard_layout` | `--keyboard-layout` | `auto`, `us`, or `jis` for macOS input; default `auto` |
 | `scale` | `--scale` | `0.1` through `1.0`; default `1.0` |
 | `fps` | `--fps` | `1` through `10`; default `2` |
@@ -69,6 +73,17 @@ Without a configuration file, argument-free startup retains the existing default
 | `[auth].password_hash` | `--generate-password-hash` (generation only) | Argon2id PHC verifier; never a plaintext password |
 
 `--help`, `--version`, `--list-monitors`, `--print-config`, `--config <PATH>`, `--init`, `--update-config`, and `--update`/`--upgrade` are runtime-only options and have no TOML key. `--print-config` shows the effective settings and redacts the password verifier. `--update-config` creates a timestamped backup and adds missing safe defaults without replacing existing values. Unknown keys in a configuration file are errors.
+
+### Update a source checkout
+
+`--update` (also `--upgrade`) updates and rebuilds only a clean source checkout;
+it never modifies a downloaded release archive. A normal Git checkout must have
+a checked-out branch with an upstream and is updated by `git pull --ff-only`.
+A JJ checkout must have an empty working-copy change; kVNC runs `jj git fetch`
+and creates a new empty change based on `main@origin`, preserving any non-empty
+JJ change by refusing to update. In either case, update from a clone dedicated
+to running kVNC rather than a feature or pull-request checkout. On macOS and
+Linux, the rebuilt `target/release/kvnc` replaces `bin/kvnc` automatically.
 
 For daemon operation, change `daemon` to `true`. With `log_file` and `pid_file` configured, argument-free startup works the same way.
 
@@ -94,7 +109,7 @@ bin/kvnc --source demo --listen 127.0.0.1:5900
 
 Connect an RFB 3.8-compatible VNC client to `127.0.0.1:5900`.
 
-`--debug` records the RFB handshake and each client message without writing clipboard contents. `--log-file` appends the same output to a file, which is useful when diagnosing a client disconnect. With an Extended Clipboard-capable client, kVNC negotiates capabilities and synchronizes UTF-8 text bidirectionally using Notify / Request / Provide with zlib compression; other clients retain legacy `ClientCutText` / `ServerCutText` interoperability.
+`--debug` records the RFB handshake and each client message without writing clipboard contents. `--log-file` appends the same output to a file, which is useful when diagnosing a client disconnect. With an Extended Clipboard-capable client, kVNC negotiates capabilities and synchronizes UTF-8 text bidirectionally using Notify / Request / Provide with zlib compression; other clients retain legacy `ClientCutText` / `ServerCutText` interoperability. An empty or non-text local clipboard is normal: kVNC leaves the last synchronized text intact and does not log an error for each polling cycle.
 
 v0.2.0 selects Hextile when a client advertises it and otherwise uses Raw. Hextile is lossless: it preserves source pixels while reducing transfer volume for flat desktop areas without reducing `scale`. kVNC sends an initial full frame, then sends only the smallest changed rectangle for incremental requests. It keeps at most one framebuffer update queued and captures no more often than `--fps`; keyboard/pointer events are handled separately, so input events do not wait behind an ongoing framebuffer transfer. Use `--fps 5` normally and `--fps 1` when reducing bandwidth is more important than refresh rate.
 
@@ -130,6 +145,23 @@ bin/kvnc --list-monitors
 bin/kvnc --source desktop --monitor 1 --allow-input --listen 127.0.0.1:5901
 ```
 
+To use one macOS-style VNC screen for every connected display, use
+`--all-monitors` (or `all_monitors = true` in the per-user configuration).
+kVNC composes the displays using their desktop positions, so a physical gap or
+an offset display remains a black area in the VNC framebuffer. Pointer input is
+routed back to the display under the pointer. `all_monitors` takes precedence
+over `monitor`. The combined desktop can be much larger than either display;
+start with `scale = 1.0` for sharp text and lower it only if the trusted-network
+bandwidth cannot keep up. On mixed-DPI desktops, including a Retina Mac panel
+beside a 4K display, all-monitor mode normalizes each image to the macOS
+logical desktop grid so positions and pointer routing stay correct. Therefore
+`scale = 1.0` is the sharpest setting for this mode, but is not a native-2x
+Retina framebuffer for the built-in panel.
+
+```sh
+bin/kvnc --source desktop --all-monitors --allow-input --listen 127.0.0.1:5900
+```
+
 On macOS, `--allow-input` also requires Accessibility permission for the launching application.
 
 On macOS, printable RFB keysyms are injected as physical key codes. This retains JIS keyboard and IME key bindings; it is not a UTF-8 conversion. `keyboard_layout = "jis"` (or `--keyboard-layout jis`) maps JIS `@` (voiced mark), `[` (semi-voiced mark), `^` (he), `¥` (prolonged sound mark), `ろ`, `け`, and `む` to their distinct macOS JIS key codes for direct Kana entry with the Japanese Kana input source. Use the default `auto` for ordinary layouts. Debug logs retain keysyms only, never typed text.
@@ -141,6 +173,7 @@ On macOS, printable RFB keysyms are injected as physical key codes. This retains
 - [Protocol and security model](docs/protocol.en.md)
 - [Platform compatibility](docs/compatibility.en.md)
 - [Background operation](docs/daemon.en.md)
+- [Instance control and development workflow](docs/control.en.md)
 - [Verification guide](docs/verification.en.md)
 - [Security policy](docs/security.en.md)
 - [Contributing](CONTRIBUTING.md)

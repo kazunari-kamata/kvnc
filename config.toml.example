@@ -8,9 +8,20 @@ listen = "127.0.0.1:5900"
 source = "desktop"
 # Zero-based display index shown by `bin/kvnc --list-monitors`.
 monitor = 0
+# Combine every available display into one virtual-desktop VNC framebuffer.
+# When true, this takes precedence over monitor and preserves each display's
+# relative position, including any empty space between displays. This can need
+# substantially more bandwidth; use scale = 1.0 for the sharpest text.
+all_monitors = false
 # Permit the connected client to control local keyboard and pointer input.
 # Keep false unless the listener and every client are trusted.
 allow_input = false
+# After a successful desktop-client handshake, request a platform-native display wake.
+# On macOS, kVNC wakes the display and holds it awake until that client disconnects;
+# Windows uses a five-second execution-state request; Linux uses X11 screen-saver/DPMS
+# reset or Wayland session-idle inhibition.
+# It never unlocks the host. Leave false unless a trusted VNC connection may wake it.
+wake_display_on_connect = false
 # macOS keyboard mapping: "auto" accepts standard keys and unambiguous Japanese keysyms.
 # Use "jis" for a JIS keyboard with Japanese Kana input; "us" disables JIS aliases.
 # This setting is ignored on non-macOS hosts.
@@ -57,6 +68,6 @@ log_retention = 14
 #   bin/kvnc --init                 Create the per-user configuration file safely.
 #   bin/kvnc --config PATH --init   Create PATH instead; add --force to replace it.
 #   bin/kvnc --update-config        Back up the active configuration and add missing defaults.
-#   bin/kvnc --update               Fast-forward a clean Git checkout; --upgrade is an alias.
+#   bin/kvnc --update               Update a clean Git or JJ checkout; --upgrade is an alias.
 #   bin/kvnc --generate-password-hash  Interactively generate auth.password_hash.
 # Config-only startup supports every remaining operational option shown above.

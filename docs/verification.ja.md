@@ -56,12 +56,13 @@ demo source への接続中に、破棄可能な plain text で確認します�
 2. kVNC host の local editor で別の text を copy し、client に paste します。
 3. Extended Clipboard 対応 client では `extended clipboard capabilities received`、`extended clipboard received` が記録されることを確認します。非対応 client では legacy clipboard の byte count が記録されます。
 4. `var/kvnc.log` に clipboard 本文が記録されないことを確認します。
+5. host の clipboard を空にするか text 以外を copy し、`could not read system clipboard` が繰返し error として記録されないことを確認します。client 側の最後に同期された text は維持されます。
 
 ## 4. desktop capture の確認
 
-demo test が成功してから、interactive desktop login で `--source desktop` を実行します。macOS では **System Settings → Privacy & Security → Screen Recording** で launcher を許可して再起動し、`sudo` は使用しません。server が `no monitor is available` と報告したら protocol の調査を中止してください。host に capture 可能な desktop context、display、または permission がありません。
+demo test が成功してから、interactive desktop login で `--source desktop` を実行します。macOS では **System Settings → Privacy & Security → Screen Recording** で launcher を許可して再起動し、`sudo` は使用しません。起動時の log に出る `desktop monitor selected` を記録し、name、primary flag、origin、dimension、scale factor を `bin/kvnc --list-monitors` と照合してください。現行 macOS build は選択した capture backend も記録します。OS が display を再構成すると monitor index が変わる場合があります。server が `no monitor is available` と報告したら protocol の調査を中止してください。host に capture 可能な desktop context、display、または permission がありません。
 
-画面が一様な黒になる場合は、まず Mac を unlock して display を wake します。`system_profiler SPDisplaysDataType` の各 display に `Display Asleep: Yes` が表示される間は、macOS が黒い capture image を返すことがあります。連続運用中に sleep を抑止する必要がある場合は、trusted local session で `caffeinate -dimsu` を実行し、終了時に `Ctrl-C` で停止します。
+画面が一様な黒になる、または wake 後に更新されなくなる場合は、まず Mac を unlock して display を wake します。`system_profiler SPDisplaysDataType` の各 display に `Display Asleep: Yes` が表示される間は、macOS が黒い capture image を返すことがあります。`wake_display_on_connect = true` でこの version を deploy 後に再接続し、log に `macOS display wake completed before framebuffer processing`、続いて `acquired macOS active-client display assertion` が記録されることを確認してください。kVNC はその assertion を認証済み VNC client が切断するまでだけ保持します。現行 build では `macOS desktop capture backend: CoreGraphics CGDisplayStream` が記録されます。window や menu の更新確認前に、この live compositor capture path が有効であることを確認してください。代わりに `macOS desktop capture backend fallback` が記録された場合は、LaunchAgent の context に standalone `kvnc` binary の Screen Recording permission がありません。kVNC は compatibility snapshot で待受を続けますが、live な window / menu 更新を期待する前に permission を許可して再起動してください。その状態で local の menu / window を変更し、`framebuffer delta sent: unchanged` だけでなく `framebuffer update sent` が記録されることを確認してください。live backend が記録されていても実機 desktop の変更が update にならない場合は、調査用に `desktop monitor selected`、backend、framebuffer-delta の各 log line を保存してください。managed desktop capture では文書化された LaunchAgent wrapper を使用してください。capture 前に一度だけ startup wake を行い、それ以外は通常の display sleep を許可します。
 
 ## 5. background operation の確認
 
@@ -69,7 +70,7 @@ macOS / Linux では、`--daemon` が listener を残し、指定した PID と 
 
 ## 6. remote input と複数 monitor の確認
 
-`--list-monitors` で stable な zero-based index を確認します。monitor ごとに別の kVNC process と listener port を起動します。これにより display ごとに独立した RFB framebuffer を提供します。
+`--list-monitors` で stable な zero-based index を確認します。display ごとに独立した RFB framebuffer が必要な場合は、monitor ごとに別の kVNC process と listener port を起動します。
 
 ```sh
 bin/kvnc --list-monitors
@@ -77,13 +78,25 @@ bin/kvnc --source desktop --monitor 0 --allow-input --listen 127.0.0.1:5900
 bin/kvnc --source desktop --monitor 1 --allow-input --listen 127.0.0.1:5901
 ```
 
+すべての display をまたぐ macOS 標準に近い1枚の VNC desktop が必要な場合は、1 process を
+`--all-monitors` で起動します。desktop 上の相対位置を維持するため、display の隙間や上下の
+ずれは VNC framebuffer では黒い領域になります。各 physical display に window を表示して
+対応する VNC region に現れることを確認し、それぞれの corner 付近を click します。log の
+`desktop virtual-desktop selected` は選択数を示し、各 `pointer event injected` には
+`monitor_index` とその display の origin が記録されます。`--all-monitors` は `--monitor`
+より優先されます。
+
+```sh
+bin/kvnc --source desktop --all-monitors --allow-input --listen 127.0.0.1:5900
+```
+
 pointer movement、left / middle / right button、wheel scroll、text key、modifier key、navigation key、F1–F12 を確認します。macOS ではこの test の前に起動元へ Accessibility permission を許可してください。untrusted network では input を有効にしないでください。
 
-Retina の primary display では、kVNC は selected monitor の scale factor を使用して captured framebuffer pixel を macOS の論理 input point へ変換します。各 corner 付近を click して、対応する local screen の位置へ操作されることを確認してください。
+Retina の primary display では、kVNC は selected monitor の scale factor を使用して captured framebuffer pixel を macOS の論理 input point へ変換します。all-monitor mode では各 display を同じ論理 desktop grid に正規化してから合成し、input は対応する display の origin へ戻します。各 corner 付近を click して、対応する local screen の位置へ操作されることを確認してください。
 
 ### drag selection の切り分け
 
-新しい debug log から開始し、破棄可能な text 上で left button の slow drag を1回だけ行います。kVNC は millisecond 精度で記録します。正常な drag は、最初の `mask=0x01`、座標が変化する1件以上の後続 `mask=0x01`、最後の `mask=0x00` で構成されます。各 `client message: PointerEvent` の直後には、同じ座標を持つ `pointer event injected` が記録される必要があります。button を保持した event がなければ client または bridge が drag を送っていません。保持 event と即時の injection があるにもかかわらず macOS の選択位置だけが違う場合は、その該当 log を kVNC input 調査に使用します。
+新しい debug log から開始し、破棄可能な text 上で left button の slow drag を1回だけ行います。kVNC は millisecond 精度で記録します。正常な drag は、最初の `mask=0x01`、座標が変化する1件以上の後続 `mask=0x01`、最後の `mask=0x00` で構成されます。各 `client message: PointerEvent` の直後には、同じ座標を持つ `pointer event injected` が記録される必要があります。injected line には `frame_origin_x`、`frame_origin_y`、`input_scale` も記録され、wake 後は current selected display の値と一致する必要があります。button を保持した event がなければ client または bridge が drag を送っていません。保持 event と即時の injection があるにもかかわらず macOS の選択位置だけが違う場合は、その該当 log を kVNC input 調査に使用します。
 
 ```sh
 rg -n 'PointerEvent|pointer event injected' var/kvnc.log | tail -n 80
